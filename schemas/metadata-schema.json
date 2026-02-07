@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "API Metadata",
+  "type": "object",
+  "properties": {
+    "controllers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "basePath": { "type": "string" },
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": { "type": "string" },
+                "path": { "type": "string" },
+                "handler": { "type": "string" },
+                "auth": { "type": ["string", "null"] },
+                "requestBody": { "type": ["object", "null"] },
+                "response": { "type": ["object", "null"] }
+              },
+              "required": ["method","path","handler"]
+            }
+          }
+        },
+        "required": ["name","basePath","endpoints"]
+      }
+    }
+  },
+  "required": ["controllers"]
+}

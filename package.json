@@ -1,0 +1,28 @@
+{
+  "name": "api-doc-agent",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "api-doc-agent": "./dist/cli.js"
+  },
+  "scripts": {
+    "validate": "ts-node ./scripts/validate-codebase.ts",
+    "build": "tsc -p tsconfig.json",
+    "extract": "ts-node ./scripts/extract-metadata.ts",
+    "normalize": "ts-node ./scripts/normalize-metadata.ts",
+    "enrich": "ts-node ./scripts/enrich-metadata.ts",
+    "generate": "ts-node ./scripts/generate-docs.ts",
+    "test": "jest",
+    "cli": "ts-node ./src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.5.1",
+    "commander": "^11.1.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.6",
+    "ts-morph": "^15.1.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
