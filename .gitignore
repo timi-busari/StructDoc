@@ -47,3 +47,9 @@ lerna-debug.log*
 src/modules/admin/shift-plan/shift-plan.controller.ts
 .vscode/settings.json
 .qodo
+
+
+# plans
+AGENTIC-WORKFLOWS.md
+plan.md
+/phases
