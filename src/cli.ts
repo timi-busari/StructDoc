@@ -74,7 +74,7 @@ class ApiDocAgent {
     }
   }
 
-  private async runPipeline(): Promise<void> {
+  private async runPipeline(useAgentic: boolean = false): Promise<void> {
     this.log('🚀 Starting API documentation generation pipeline...');
 
     // Step 1: Extract metadata
@@ -86,8 +86,13 @@ class ApiDocAgent {
     await this.runScript('normalize', ['metadata.json', this.options.path]);
 
     // Step 3: Enrich with AI-generated content
-    this.log('🤖 Step 3/4: Enriching with AI-generated descriptions...');
-    await this.runScript('enrich');
+    if (useAgentic) {
+      this.log('🎭 Step 3/4: Enriching with Agentic AI Workflows...');
+      await this.runScript('enrich-agentic');
+    } else {
+      this.log('⚠️ Step 3/4: Using simple enrichment (DEPRECATED - use agentic workflow for better results)...');
+      await this.runScript('enrich');
+    }
 
     // Step 4: Generate final documentation
     this.log('📝 Step 4/4: Generating OpenAPI and Markdown documentation...');
@@ -122,11 +127,11 @@ class ApiDocAgent {
     }
   }
 
-  async run(): Promise<void> {
+  async run(useAgentic: boolean = false): Promise<void> {
     try {
       await this.validateProject();
       await this.ensureOutputDirectory();
-      await this.runPipeline();
+      await this.runPipeline(useAgentic);
       await this.generateSummary();
       
       this.log('🎉 API documentation generated successfully!');
@@ -156,6 +161,8 @@ function main() {
     .argument('[path]', 'Path to NestJS project', '.')
     .option('-o, --output <output>', 'Output directory for generated docs', './docs')
     .option('-v, --verbose', 'Enable verbose logging', false)
+    .option('--agentic', 'Use advanced multi-agent AI workflows for enrichment (default: true)', true)
+    .option('--simple', 'Use simple single-agent enrichment instead of agentic workflow', false)
     .action(async (projectPath, options) => {
       const resolvedPath = path.resolve(projectPath);
       const resolvedOutput = path.resolve(options.output);
@@ -166,8 +173,33 @@ function main() {
         verbose: options.verbose
       });
 
-      await agent.run();
+      // Use simple mode if --simple flag is provided, otherwise use agentic (default)
+      const useAgentic = options.simple ? false : options.agentic;
+      await agent.run(useAgentic);
     });
+
+  // Add agent management commands
+  program
+    .command('agents')
+    .description('Manage AI agents and workflows')
+    .addCommand(
+      new Command('status')
+        .description('Check AI agent health and availability')
+        .action(async () => {
+          await execAsync('npm run agents:status', { cwd: __dirname.includes('dist') ? path.join(__dirname, '..') : process.cwd() })
+            .then(result => console.log(result.stdout))
+            .catch(error => console.error('❌ Agent status check failed:', error.message));
+        })
+    )
+    .addCommand(
+      new Command('test')
+        .description('Test AI agents with sample data')
+        .action(async () => {
+          await execAsync('npm run agents:test', { cwd: __dirname.includes('dist') ? path.join(__dirname, '..') : process.cwd() })
+            .then(result => console.log(result.stdout))
+            .catch(error => console.error('❌ Agent test failed:', error.message));
+        })
+    );
 
   program.parse();
 }

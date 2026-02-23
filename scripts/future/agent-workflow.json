@@ -1,0 +1,52 @@
+{
+  "name": "Default Agentic Workflow",
+  "description": "Multi-agent workflow for comprehensive API documentation enrichment",
+  "agents": {
+    "description": {
+      "enabled": true,
+      "provider": "openai",
+      "priority": 1,
+      "timeout": 30000,
+      "specialization": "Creates clear technical descriptions and practical use cases"
+    },
+    "examples": {
+      "enabled": true,
+      "provider": "anthropic",
+      "priority": 2,
+      "timeout": 45000,
+      "specialization": "Generates realistic request/response examples based on schemas"
+    },
+    "errors": {
+      "enabled": true,
+      "provider": "openai",
+      "priority": 3,
+      "timeout": 30000,
+      "specialization": "Identifies common error scenarios and troubleshooting guidance"
+    },
+    "security": {
+      "enabled": true,
+      "provider": "anthropic",
+      "priority": 4,
+      "timeout": 20000,
+      "specialization": "Analyzes authentication requirements and security considerations"
+    }
+  },
+  "execution": {
+    "parallel": true,
+    "maxConcurrency": 4,
+    "retryStrategy": "exponential",
+    "fallbackStrategy": "template"
+  },
+  "quality": {
+    "enableValidation": true,
+    "minDescriptionLength": 50,
+    "requireExamples": true,
+    "enforceStructure": true
+  },
+  "customizations": {
+    "industryContext": "SAAS Management Software",
+    "audienceLevel": "intermediate",
+    "includePerformanceNotes": false,
+    "generateSDKExamples": false
+  }
+}
