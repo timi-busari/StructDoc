@@ -188,7 +188,7 @@ async function enrichMetadataWithAgents(inputFile: string, outputFile: string): 
 }
 
 // Main execution
-const inputFile = process.argv[2] || './normalized-metadata.json';
-const outputFile = process.argv[3] || './enriched-metadata.json';
+const inputFile = process.argv[2] || './.temp/normalized-metadata.json';
+const outputFile = process.argv[3] || './.temp/enriched-metadata.json';
 
 enrichMetadataWithAgents(inputFile, outputFile);

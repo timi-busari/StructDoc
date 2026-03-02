@@ -44,7 +44,9 @@ cd StructDoc
 # Install dependencies
 npm install
 
-# Set up environment
+# Interactive setup (recommended)
+npm run cli:init
+# OR manually set up environment
 cp .env.example .env
 # Edit .env with your AI API keys
 ```
@@ -52,14 +54,20 @@ cp .env.example .env
 ### Basic Usage
 
 ```bash
-# Generate documentation for your NestJS project
+# 🚀 Interactive setup wizard (first time)
+npm run cli:init
+
+# 📝 Generate documentation for your NestJS project
 npm run cli -- generate ./path/to/nestjs-project --output ./docs
 
-# With verbose logging
-npm run cli -- generate ./path/to/nestjs-project --output ./docs --verbose
+# 👀 Watch mode for development (auto-regenerates on changes)
+npm run cli:watch ./path/to/nestjs-project
 
-# Use legacy simple enrichment (not recommended)
-npm run cli -- generate ./path/to/nestjs-project --simple
+# 🌐 Preview generated documentation
+npm run cli:serve --port 3000
+
+# ⚙️ Validate configuration
+npm run cli:validate
 ```
 
 ## 🔧 Configuration
@@ -112,6 +120,13 @@ your-nestjs-app/
 
 ## 📖 Usage Examples
 
+### Interactive Setup
+
+```bash
+# First-time setup with guided wizard
+npm run cli:init
+```
+
 ### Generate Documentation
 
 ```bash
@@ -123,9 +138,28 @@ npm run cli -- generate ./my-nestjs-app --output ./api-docs
 
 # Enable verbose logging to see agent activity
 npm run cli -- generate ./my-nestjs-app --verbose
+
+# Use simple enrichment (not recommended)
+npm run cli -- generate ./my-nestjs-app --simple
 ```
 
-### Check Agent Health
+### Development Workflow
+
+```bash
+# Watch mode - automatically regenerates on file changes
+npm run cli:watch ./my-nestjs-app
+
+# Preview documentation in browser
+npm run cli:serve --port 3000
+
+# Validate configuration
+npm run cli:validate
+
+# Diagnose configuration issues
+npm run cli -- config doctor
+```
+
+### Agent Management
 
 ```bash
 # Check which AI providers are available
@@ -136,6 +170,30 @@ npm run agents:test
 
 # Test individual agents
 npm run agents:test-individual
+```
+
+### CLI Command Reference
+
+```bash
+# 🚀 Setup & Configuration
+structdoc init                    # Interactive setup wizard
+structdoc config validate        # Validate current configuration  
+structdoc config doctor          # Diagnose configuration issues
+
+# 📝 Documentation Generation
+structdoc generate [path]        # Generate API documentation
+structdoc generate --simple      # Use simple enrichment mode
+structdoc generate --verbose     # Enable detailed logging
+
+# 👀 Development Workflow  
+structdoc watch [path]           # Auto-regenerate on file changes
+structdoc serve                  # Preview documentation server
+structdoc serve --port 3000      # Serve on custom port
+
+# 🤖 Agent Management
+structdoc agents status          # Check AI provider health
+structdoc agents test            # Test all agents
+structdoc agents test-individual # Test agents separately
 ```
 
 ## 🏗️ How It Works
@@ -255,19 +313,24 @@ npm run validate ./examples/sample-app
 npm run extract ./examples/sample-app
 npm run normalize metadata.json ./examples/sample-app  
 npm run enrich-agentic
-npm run generate enriched-metadata.json ./test-output/openapi.json ./test-output/api-docs.md
+npm run generate enriched-metadata.json ./docs/openapi.json ./docs/api-docs.md
 ```
 
 ## 🔍 Troubleshooting
 
 ### Common Issues
 
+**"Command not found: structdoc"**
+- Run `npm run build` to compile TypeScript
+- Use `npm run cli -- <command>` during development
+
 **"No AI API keys configured"**
+- Run `structdoc init` for interactive setup
 - Add at least one provider to your `.env` file
 - For local setup, install and run Ollama with `ENABLE_OLLAMA=true`
 
 **"Failed to parse AI response"**  
-- Check API key validity and rate limits
+- Check API key validity and rate limits using `structdoc config validate`
 - Try different AI model (e.g., switch from gpt-4 to gpt-3.5-turbo)
 - Enable fallback with `AGENT_FALLBACK_STRATEGY=template`
 
@@ -278,14 +341,29 @@ npm run generate enriched-metadata.json ./test-output/openapi.json ./test-output
 
 **AgentOrchestrator Issues**
 ```bash
+# Comprehensive diagnostics
+structdoc config doctor
+
 # Check agent health
-npm run agents:status
+structdoc agents status
 
 # Test connectivity  
-npm run agents:test
+structdoc agents test
 
 # Review logs with verbose mode
-npm run cli -- generate ./project --verbose
+structdoc generate ./project --verbose
+```
+
+**Development Issues**
+```bash
+# Build project (for binary usage)
+npm run build
+
+# Watch mode not detecting changes
+structdoc watch ./project --verbose  # Check file patterns
+
+# Preview server not starting
+structdoc config validate            # Check configuration first
 ```
 
 ## 📊 Performance Metrics

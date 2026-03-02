@@ -27,6 +27,18 @@ lerna-debug.log*
 /coverage
 /.nyc_output
 
+# Test outputs  
+test-output/
+test-cli-output/
+test/output/
+test/cli-output/
+
+# Temporary pipeline files
+.temp/
+metadata.json
+normalized-metadata.json
+enriched-metadata.json
+
 # IDEs and editors
 /.idea
 .project

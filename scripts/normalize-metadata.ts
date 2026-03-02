@@ -221,7 +221,11 @@ async function run(metadataPath = 'metadata.json', targetProject = '.') {
   }
 
   const rawMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-  const outPath = 'normalized-metadata.json';
+  const tempDir = path.join(process.cwd(), '.temp');
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  const outPath = path.join(tempDir, 'normalized-metadata.json');
 
   // Parse Prisma enums
   const prismaEnums = parsePrismaEnums(targetProject);
@@ -389,7 +393,7 @@ async function run(metadataPath = 'metadata.json', targetProject = '.') {
   console.log(`Schemas generated: ${Object.keys(schemas).length}`);
 }
 
-const metadataPath = process.argv[2] || 'metadata.json';
+const metadataPath = process.argv[2] || './.temp/metadata.json';
 const targetProject = process.argv[3] || './examples/sample-app';
 run(metadataPath, targetProject).catch(err => {
   console.error('ERROR:', err);

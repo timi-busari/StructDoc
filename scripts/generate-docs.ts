@@ -350,7 +350,7 @@ async function generateDocs(inputFile: string, openapiFile: string, markdownFile
 }
 
 // Main execution
-const inputFile = process.argv[2] || './enriched-metadata.json';
+const inputFile = process.argv[2] || './.temp/enriched-metadata.json';
 const openapiFile = process.argv[3] || './openapi.json';
 const markdownFile = process.argv[4] || './api-docs.md';
 
