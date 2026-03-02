@@ -181,7 +181,11 @@ function normalizePath(basePath: string, routePath: string): string {
 
 async function run(target = '.') {
   const absTarget = path.resolve(target);
-  const outPath = path.join(process.cwd(), 'metadata.json');
+  const tempDir = path.join(process.cwd(), '.temp');
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  const outPath = path.join(tempDir, 'metadata.json');
 
   // Parse Prisma enums
   const prismaEnums = parsePrismaEnums(absTarget);
