@@ -1,4 +1,4 @@
-import { Agent, AgentConfig, AgentResult, EnrichmentTask } from './types';
+import { Agent, AgentConfig, AgentResult, EnrichmentTask, AIProvider } from './types';
 import { ProviderFactory } from './providers';
 
 /**
@@ -7,7 +7,7 @@ import { ProviderFactory } from './providers';
 export class DescriptionAgent extends Agent {
   name = 'DescriptionAgent';
   provider: string;
-  private aiProvider: any;
+  private aiProvider: AIProvider | null = null;
 
   constructor(config: AgentConfig) {
     super(config);
@@ -38,6 +38,18 @@ export class DescriptionAgent extends Agent {
   async process(task: EnrichmentTask): Promise<Partial<AgentResult>> {
     const { path, method, endpoint } = task;
 
+    // Build swagger context block when decorator hints are available
+    const swaggerHints = endpoint.swagger
+      ? [
+          endpoint.swagger.summary    ? `  Developer-provided summary: "${endpoint.swagger.summary}"` : '',
+          endpoint.swagger.description ? `  Developer-provided description: "${endpoint.swagger.description}"` : '',
+          endpoint.swagger.tags?.length ? `  Tags: ${endpoint.swagger.tags.join(', ')}` : '',
+          endpoint.swagger.responses?.length
+            ? `  Declared responses: ${endpoint.swagger.responses.map(r => `${r.status} - ${r.description}`).join(', ')}`
+            : '',
+        ].filter(Boolean).join('\n')
+      : null;
+
     const systemPrompt = `You are a specialized API documentation agent focused on creating clear, concise descriptions and practical use cases.
 
 Your task is to analyze API endpoints and provide:
@@ -61,13 +73,19 @@ Respond with JSON in this exact format:
 ENDPOINT: ${method.toUpperCase()} ${path}
 HANDLER: ${endpoint.handler || 'unknown'}
 AUTH: ${endpoint.auth ? 'Required' : 'Not required'}
-PARAMETERS: ${JSON.stringify(endpoint.params || [], null, 2)}
+PARAMETERS: ${JSON.stringify(endpoint.params || [], null, 2)}${swaggerHints ? `\n\nEXISTING ANNOTATIONS FROM SOURCE CODE:\n${swaggerHints}\n\nUse these as a starting point — expand and improve them, do not contradict them.` : ''}
 
 Focus on what this endpoint accomplishes from a business/technical perspective.`;
 
     try {
+      if (!this.aiProvider) {
+        return this.generateFallbackDescription(path, method);
+      }
       const response = await this.aiProvider.call(systemPrompt, userPrompt);
-      const cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      let cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      // Extract just the JSON object — Ollama sometimes appends trailing prose after the closing brace
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) cleanResponse = jsonMatch[0];
       const parsed = JSON.parse(cleanResponse);
       
       return {

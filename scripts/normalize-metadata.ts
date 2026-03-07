@@ -133,6 +133,12 @@ type NormalizedEndpoint = {
   requestBody?: { $ref: string } | null;
   response?: { $ref: string } | null;
   params?: Array<{ name: string; in: string; type: string }>;
+  swagger?: {
+    summary?: string;
+    description?: string;
+    tags?: string[];
+    responses?: Array<{ status: number; description: string }>;
+  };
 };
 
 type NormalizedController = {
@@ -214,13 +220,37 @@ function extractFilePath(importStr: string): string | null {
   return match ? match[1] : null;
 }
 
-async function run(metadataPath = 'metadata.json', targetProject = '.') {
-  if (!fs.existsSync(metadataPath)) {
-    console.error(`Metadata file not found: ${metadataPath}`);
-    process.exit(1);
+async function run(metadataPathOrData: string | Record<string, unknown> = 'metadata.json', targetProject = '.') {
+  interface RawMetadata {
+    controllers: Array<{
+      name: string;
+      basePath: string;
+      endpoints: Array<{
+        method?: string;
+        path?: string;
+        handler?: string;
+        auth?: string | null;
+        params?: Array<{ name: string; in: string; type: string }>;
+        requestBody?: { type?: string } | null;
+        response?: { type?: string } | null;
+        swagger?: unknown;
+        [key: string]: unknown;
+      }>;
+    }>;
   }
 
-  const rawMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  let rawMetadata: RawMetadata;
+
+  if (typeof metadataPathOrData === 'string') {
+    if (!fs.existsSync(metadataPathOrData)) {
+      console.error(`Metadata file not found: ${metadataPathOrData}`);
+      process.exit(1);
+    }
+    rawMetadata = JSON.parse(fs.readFileSync(metadataPathOrData, 'utf8')) as RawMetadata;
+  } else {
+    rawMetadata = metadataPathOrData as unknown as RawMetadata;
+  }
+
   const tempDir = path.join(process.cwd(), '.temp');
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
@@ -333,7 +363,8 @@ async function run(metadataPath = 'metadata.json', targetProject = '.') {
         path: endpoint.path,
         handler: endpoint.handler,
         auth: endpoint.auth,
-        params: endpoint.params
+        params: endpoint.params,
+        ...(endpoint.swagger ? { swagger: endpoint.swagger } : {}),
       };
 
       // Convert requestBody to $ref
@@ -391,11 +422,16 @@ async function run(metadataPath = 'metadata.json', targetProject = '.') {
   fs.writeFileSync(outPath, JSON.stringify(normalizedMetadata, null, 2));
   console.log(`Wrote normalized metadata to ${outPath}`);
   console.log(`Schemas generated: ${Object.keys(schemas).length}`);
+  return normalizedMetadata;
 }
+
+export { run as normalizeMetadata };
 
 const metadataPath = process.argv[2] || './.temp/metadata.json';
 const targetProject = process.argv[3] || './examples/sample-app';
-run(metadataPath, targetProject).catch(err => {
-  console.error('ERROR:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  run(metadataPath, targetProject).catch(err => {
+    console.error('ERROR:', err);
+    process.exit(1);
+  });
+}

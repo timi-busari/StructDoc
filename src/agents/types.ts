@@ -2,11 +2,63 @@
  * Core types for the Agentic Workflow system
  */
 
+/** Swagger/OpenAPI hints extracted directly from @nestjs/swagger decorators */
+export interface SwaggerMetadata {
+  /** Value of @ApiOperation({ summary }) */
+  summary?: string;
+  /** Value of @ApiOperation({ description }) */
+  description?: string;
+  /** Values of @ApiTags() on the controller class */
+  tags?: string[];
+  /** One entry per @ApiResponse() decorator on the method */
+  responses?: Array<{ status: number; description: string }>;
+}
+
+/** Shape of a single controller endpoint produced by the extraction/normalization phase */
+export interface NormalizedEndpoint {
+  method: string;
+  path: string;
+  handler: string;
+  auth?: string | null;
+  requestBody?: { $ref: string } | null;
+  response?: { $ref: string } | null;
+  params?: Array<{ name: string; in: string; type: string }>;
+  /** Populated when the source code contains @nestjs/swagger decorators */
+  swagger?: SwaggerMetadata;
+}
+
+/** OpenAPI-compatible JSON Schema object */
+export interface SchemaObject {
+  type?: string;
+  format?: string;
+  description?: string;
+  enum?: string[];
+  items?: SchemaObject;
+  properties?: Record<string, SchemaObject>;
+  required?: string[];
+  $ref?: string;
+  nullable?: boolean;
+  allOf?: SchemaObject[];
+  oneOf?: SchemaObject[];
+  anyOf?: SchemaObject[];
+  additionalProperties?: boolean | SchemaObject;
+}
+
+/** A freeform JSON payload used for request/response examples */
+export type ExamplePayload = Record<string, unknown>;
+
+/** Per-agent status returned by AgentOrchestrator.getAgentStatus() */
+export interface AgentStatus {
+  name: string;
+  provider: string;
+  healthy: boolean;
+}
+
 export interface EnrichmentTask {
   path: string;
   method: string;
-  endpoint: any;
-  schemas: Record<string, any>;
+  endpoint: NormalizedEndpoint;
+  schemas: Record<string, SchemaObject>;
 }
 
 export interface AgentResult {
@@ -14,8 +66,8 @@ export interface AgentResult {
   originalMethod: string;
   description?: string;
   useCase?: string;
-  requestExample?: any;
-  responseExample?: any;
+  requestExample?: ExamplePayload;
+  responseExample?: ExamplePayload;
   authNotes?: string;
   errorScenarios?: string[];
 }

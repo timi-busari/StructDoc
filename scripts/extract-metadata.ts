@@ -10,6 +10,12 @@ type Endpoint = {
   requestBody?: { type: string | null } | null;
   response?: { type: string | null } | null;
   params?: Array<{ name: string; in: string; type: string | null }>;
+  swagger?: {
+    summary?: string;
+    description?: string;
+    tags?: string[];
+    responses?: Array<{ status: number; description: string }>;
+  };
 };
 
 type ControllerMeta = {
@@ -221,6 +227,12 @@ async function run(target = '.') {
       const controllerMeta: ControllerMeta = { name: cls.getName() || 'Anonymous', basePath, endpoints: [] };
       const classGuards = decs.filter(d => d.getName() === 'UseGuards').map(d => d.getText());
 
+      // Parse class-level @ApiTags — shared by all endpoints in this controller
+      const apiTagsDec = decs.find(d => d.getName() === 'ApiTags');
+      const controllerTags: string[] = apiTagsDec
+        ? apiTagsDec.getArguments().map(a => a.getText().replace(/^['`"]|['`"]$/g, '')).filter(Boolean)
+        : [];
+
       const methods = cls.getMethods();
       for (const m of methods) {
         const mDecs = m.getDecorators();
@@ -268,6 +280,45 @@ async function run(target = '.') {
         const methodGuards = mDecs.filter(d => d.getName() === 'UseGuards').map(d => d.getText());
         const auth = methodGuards.length > 0 ? methodGuards.join(',') : (classGuards.length > 0 ? classGuards.join(',') : null);
 
+        // ── NestJS Swagger decorator parsing ────────────────────────────────
+        const swaggerMeta: Endpoint['swagger'] = {};
+        let hasSwagger = false;
+
+        // @ApiOperation({ summary, description })
+        const apiOpDec = mDecs.find(d => d.getName() === 'ApiOperation');
+        if (apiOpDec) {
+          const argText = apiOpDec.getArguments()[0]?.getText() || '';
+          const summaryMatch = argText.match(/summary\s*:\s*['`"]([^'`"]+)['`"]/);
+          const descMatch = argText.match(/description\s*:\s*['`"]([^'`"]+)['`"]/);
+          if (summaryMatch) { swaggerMeta.summary = summaryMatch[1]; hasSwagger = true; }
+          if (descMatch) { swaggerMeta.description = descMatch[1]; hasSwagger = true; }
+        }
+
+        // @ApiResponse({ status, description }) — can appear multiple times
+        const apiResDecs = mDecs.filter(d => d.getName() === 'ApiResponse');
+        if (apiResDecs.length > 0) {
+          swaggerMeta.responses = [];
+          for (const resDec of apiResDecs) {
+            const argText = resDec.getArguments()[0]?.getText() || '';
+            const statusMatch = argText.match(/status\s*:\s*(\d+)/);
+            const descMatch = argText.match(/description\s*:\s*['`"]([^'`"]+)['`"]/);
+            if (statusMatch) {
+              swaggerMeta.responses.push({
+                status: parseInt(statusMatch[1], 10),
+                description: descMatch?.[1] || '',
+              });
+              hasSwagger = true;
+            }
+          }
+        }
+
+        // Controller-level @ApiTags (if any)
+        if (controllerTags.length > 0) {
+          swaggerMeta.tags = controllerTags;
+          hasSwagger = true;
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         const endpoint: Endpoint = {
           method: methodName,
           path: normalizePath(basePath || '', routePath || ''),
@@ -276,6 +327,7 @@ async function run(target = '.') {
           requestBody,
           response,
           params: params.length ? deterministicSort(params) : undefined,
+          ...(hasSwagger ? { swagger: swaggerMeta } : {}),
         };
 
         controllerMeta.endpoints.push(endpoint);
@@ -289,7 +341,13 @@ async function run(target = '.') {
   const out = { controllers: deterministicSort(controllers) };
   fs.writeFileSync(outPath, JSON.stringify(out, null, 2));
   console.log('Wrote metadata to', outPath);
+  return out;
 }
 
+/** Standalone entry point — called when the script is executed directly */
+export { run as extractMetadata };
+
 const target = process.argv[2] || '.';
-run(target).catch(err => { console.error('ERROR:', err); process.exit(1); });
+if (require.main === module) {
+  run(target).catch(err => { console.error('ERROR:', err); process.exit(1); });
+}

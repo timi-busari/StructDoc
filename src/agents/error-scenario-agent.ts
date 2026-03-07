@@ -1,4 +1,4 @@
-import { Agent, AgentConfig, AgentResult, EnrichmentTask } from './types';
+import { Agent, AgentConfig, AgentResult, EnrichmentTask, AIProvider, NormalizedEndpoint, SchemaObject } from './types';
 import { ProviderFactory } from './providers';
 
 /**
@@ -7,7 +7,7 @@ import { ProviderFactory } from './providers';
 export class ErrorScenarioAgent extends Agent {
   name = 'ErrorScenarioAgent';
   provider: string;
-  private aiProvider: any;
+  private aiProvider: AIProvider | null = null;
 
   constructor(config: AgentConfig) {
     super(config);
@@ -74,8 +74,14 @@ PARAMETERS: ${JSON.stringify(endpoint.params || [], null, 2)}
 What errors might developers encounter when using this endpoint?`;
 
     try {
+      if (!this.aiProvider) {
+        return this.generateFallbackErrors(method, endpoint, null);
+      }
       const response = await this.aiProvider.call(systemPrompt, userPrompt);
-      const cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      let cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      // Extract just the JSON object — Ollama sometimes appends trailing prose after the closing brace
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) cleanResponse = jsonMatch[0];
       const parsed = JSON.parse(cleanResponse);
       
       return {
@@ -89,7 +95,7 @@ What errors might developers encounter when using this endpoint?`;
     }
   }
 
-  private generateFallbackErrors(method: string, endpoint: any, requestSchema: any): Partial<AgentResult> {
+  private generateFallbackErrors(method: string, endpoint: NormalizedEndpoint, requestSchema: SchemaObject | null): Partial<AgentResult> {
     const errors: string[] = [];
 
     // Common HTTP errors
@@ -104,7 +110,7 @@ What errors might developers encounter when using this endpoint?`;
     // Method-specific errors
     switch (method.toLowerCase()) {
       case 'get':
-        if (endpoint.params?.some((p: any) => p.in === 'path')) {
+        if (endpoint.params?.some(p => p.in === 'path')) {
           errors.push('Not found (404) - Resource does not exist or has been deleted');
         }
         errors.push('Bad request (400) - Invalid query parameters or filters');

@@ -1,4 +1,4 @@
-import { Agent, AgentConfig, AgentResult, EnrichmentTask } from './types';
+import { Agent, AgentConfig, AgentResult, EnrichmentTask, AIProvider } from './types';
 import { ProviderFactory } from './providers';
 
 /**
@@ -7,7 +7,7 @@ import { ProviderFactory } from './providers';
 export class SecurityAgent extends Agent {
   name = 'SecurityAgent';
   provider: string;
-  private aiProvider: any;
+  private aiProvider: AIProvider | null = null;
 
   constructor(config: AgentConfig) {
     super(config);
@@ -72,8 +72,14 @@ PATH CONTAINS SENSITIVE DATA: ${this.hasSensitivePathData(path)}
 What authentication guidance should developers know about this endpoint?`;
 
     try {
+      if (!this.aiProvider) {
+        return {};
+      }
       const response = await this.aiProvider.call(systemPrompt, userPrompt);
-      const cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      let cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      // Extract just the JSON object — Ollama sometimes appends trailing prose after the closing brace
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) cleanResponse = jsonMatch[0];
       const parsed = JSON.parse(cleanResponse);
       
       return {

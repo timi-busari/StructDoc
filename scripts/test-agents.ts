@@ -39,6 +39,8 @@ async function testAgents(): Promise<void> {
       path: '/api/users/:id',
       method: 'get',
       endpoint: {
+        method: 'get',
+        path: '/api/users/:id',
         handler: 'UserController.findById',
         auth: 'BearerAuth',
         params: [

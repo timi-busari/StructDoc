@@ -24,6 +24,7 @@ class ApiDocAgent {
   private options: CLIOptions;
   private progressBar?: cliProgress.SingleBar;
   private spinner?: ora.Ora;
+  private pipelineResult?: import('./pipeline').PipelineResult;
 
   constructor(options: CLIOptions) {
     this.options = options;
@@ -145,71 +146,33 @@ class ApiDocAgent {
   }
 
   private async runPipeline(useAgentic: boolean = true): Promise<void> {
-    this.log('🚀 Starting AI-powered documentation generation pipeline...', 'info');
-    
-    this.progressBar = this.createProgressBar(4);
-    this.progressBar.start(4, 0, { stage: 'Initializing...' });
+    const { Pipeline } = await import('./pipeline');
+
+    const pipeline = new Pipeline({
+      projectPath: this.options.path,
+      outputDir: this.options.output,
+      verbose: this.options.verbose,
+      agentic: useAgentic,
+    });
 
     try {
-      // Step 1: Extract metadata
-      this.progressBar.update(1, { stage: 'Extracting metadata from controllers...' });
-      await this.runScript('extract', [this.options.path]);
-      this.log('📊 Metadata extraction completed', 'success');
-
-      // Step 2: Normalize metadata 
-      this.progressBar.update(2, { stage: 'Normalizing to OpenAPI structure...' });
-      await this.runScript('normalize', ['.temp/metadata.json', this.options.path]);
-      this.log('🔧 Metadata normalization completed', 'success');
-
-      // Step 3: Enrich with AI-generated content
-      this.progressBar.update(3, { stage: useAgentic ? 'AI agents enriching content...' : 'Simple enrichment...' });
-      if (useAgentic) {
-        await this.runScript('enrich-agentic');
-        this.log('🎭 AI agent enrichment completed', 'success');
-      } else {
-        this.log('⚠️ Using simple enrichment - consider upgrading to agentic workflow', 'warn');
-        await this.runScript('enrich');
-      }
-
-      // Step 4: Generate final documentation
-      this.progressBar.update(4, { stage: 'Generating final documentation...' });
-      const outputOpenApi = path.join(this.options.output, 'openapi.json');
-      const outputMarkdown = path.join(this.options.output, 'api-docs.md');
-      await this.runScript('generate', ['.temp/enriched-metadata.json', outputOpenApi, outputMarkdown]);
-      
-      this.progressBar.stop();
-      this.log('📝 Documentation generation completed', 'success');
-      
-    } catch (error: any) {
-      this.progressBar?.stop();
+      this.pipelineResult = await pipeline.run();
+    } catch (error) {
       throw error;
     }
   }
 
-  private async generateSummary(): Promise<void> {
-    try {
-      const enrichedPath = '.temp/enriched-metadata.json';
-      if (!fs.existsSync(enrichedPath)) {
-        this.log('No enriched metadata found for summary', 'verbose');
-        return;
-      }
+  private generateSummary(): void {
+    const result = this.pipelineResult;
+    if (!result) return;
 
-      const enriched = JSON.parse(fs.readFileSync(enrichedPath, 'utf-8'));
-      const totalEndpoints = enriched.controllers?.reduce((sum: number, controller: any) => 
-        sum + (controller.endpoints?.length || 0), 0) || 0;
-      const totalControllers = enriched.controllers?.length || 0;
-      const totalSchemas = Object.keys(enriched.components?.schemas || {}).length;
-
-      console.log('\\n📋 Generation Summary:');
-      console.log(`   • Controllers: ${totalControllers}`);
-      console.log(`   • Endpoints: ${totalEndpoints}`);
-      console.log(`   • Schemas: ${totalSchemas}`);
-      console.log(`   • OpenAPI: ${path.join(this.options.output, 'openapi.json')}`);
-      console.log(`   • Markdown: ${path.join(this.options.output, 'api-docs.md')}`);
-      
-    } catch (error) {
-      this.log('Failed to generate summary', 'verbose');
-    }
+    console.log('\n📋 Generation Summary:');
+    console.log(`   • Controllers: ${result.controllers}`);
+    console.log(`   • Endpoints: ${result.endpoints}`);
+    console.log(`   • Schemas: ${result.schemas}`);
+    console.log(`   • OpenAPI: ${result.openapiFile}`);
+    console.log(`   • Markdown: ${result.markdownFile}`);
+    console.log(`   • Duration: ${(result.durationMs / 1000).toFixed(1)}s`);
   }
 
   async run(useAgentic: boolean = true): Promise<void> {
@@ -217,7 +180,7 @@ class ApiDocAgent {
       await this.validateProject();
       await this.ensureOutputDirectory();
       await this.runPipeline(useAgentic);
-      await this.generateSummary();
+      this.generateSummary();
       
       this.log('🎉 API documentation generated successfully!', 'success');
       

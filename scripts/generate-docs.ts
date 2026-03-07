@@ -1,38 +1,41 @@
 import fs from 'fs';
 import path from 'path';
+import { SchemaObject, ExamplePayload } from '../src/agents/types';
+import type { EnrichedMetadata } from './enrich-metadata-agentic';
 
-interface EnrichedEndpoint {
-  originalPath: string;
-  originalMethod: string;
-  description: string;
-  useCase: string;
-  requestExample?: any;
-  responseExample?: any;
-  authNotes?: string;
-  errorScenarios: string[];
+// Local alias kept for readability inside this file
+type EnrichedEndpoint = EnrichedMetadata['enriched']['endpoints'][number];
+
+interface OpenAPIParameter {
+  name: string;
+  in: string;
+  required: boolean;
+  schema: { type: string };
 }
 
-interface EnrichedMetadata {
-  controllers: Array<{
-    name: string;
-    basePath: string;
-    endpoints: Array<{
-      method: string;
-      path: string;
-      handler: string;
-      auth?: string | null;
-      requestBody?: { $ref: string } | null;
-      response?: { $ref: string } | null;
-      params?: Array<{ name: string; in: string; type: string }>;
-    }>;
-  }>;
-  components?: {
-    schemas: Record<string, any>;
+interface OpenAPIResponseBody {
+  description: string;
+  content?: Record<string, { schema: { $ref: string }; example?: ExamplePayload }>;
+}
+
+interface OpenAPIOperation {
+  operationId: string;
+  summary: string;
+  description: string;
+  tags: string[];
+  parameters?: OpenAPIParameter[];
+  requestBody?: {
+    required: boolean;
+    content: Record<string, { schema: { $ref: string }; example?: ExamplePayload }>;
   };
-  enriched: {
-    endpoints: EnrichedEndpoint[];
-    generatedAt: string;
-  };
+  responses: Record<string, OpenAPIResponseBody>;
+  security?: Array<Record<string, string[]>>;
+}
+
+interface OpenAPISecurityScheme {
+  type: string;
+  scheme?: string;
+  bearerFormat?: string;
 }
 
 interface OpenAPISpec {
@@ -42,18 +45,49 @@ interface OpenAPISpec {
     version: string;
     description: string;
   };
-  paths: Record<string, Record<string, any>>;
+  paths: Record<string, Record<string, OpenAPIOperation>>;
   components: {
-    schemas: Record<string, any>;
-    securitySchemes?: Record<string, any>;
+    schemas: Record<string, SchemaObject>;
+    securitySchemes?: Record<string, OpenAPISecurityScheme>;
   };
   security?: Array<Record<string, string[]>>;
 }
 
 /**
+ * Read the target project's package.json to extract title and version.
+ * Falls back to sensible defaults when the file is absent or unreadable.
+ */
+function readProjectInfo(): { title: string; version: string; description: string } {
+  try {
+    const pkgPath = path.join(process.cwd(), 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as {
+        name?: string;
+        version?: string;
+        description?: string;
+      };
+      return {
+        title: pkg.name
+          ? pkg.name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+          : 'API Documentation',
+        version: pkg.version ?? '1.0.0',
+        description: pkg.description ?? 'Auto-generated API documentation from NestJS codebase',
+      };
+    }
+  } catch {
+    // Ignore read/parse errors and fall through to defaults
+  }
+  return {
+    title: 'API Documentation',
+    version: '1.0.0',
+    description: 'Auto-generated API documentation from NestJS codebase',
+  };
+}
+
+/**
  * Convert parameter type string to OpenAPI type
  */
-function convertParamType(typeStr: string): any {
+function convertParamType(typeStr: string): { type: string } {
   switch (typeStr) {
     case 'number':
       return { type: 'number' };
@@ -69,13 +103,16 @@ function convertParamType(typeStr: string): any {
 /**
  * Generate OpenAPI 3.1 specification from enriched metadata
  */
-function generateOpenAPI(enrichedData: EnrichedMetadata): OpenAPISpec {
+function generateOpenAPI(
+  enrichedData: EnrichedMetadata,
+  projectInfo: { title: string; version: string; description: string },
+): OpenAPISpec {
   const openapi: OpenAPISpec = {
     openapi: '3.0.3',
     info: {
-      title: 'API Documentation',
-      version: '1.0.0',
-      description: 'Auto-generated API documentation from NestJS codebase'
+      title: projectInfo.title,
+      version: projectInfo.version,
+      description: projectInfo.description,
     },
     paths: {},
     components: {
@@ -109,11 +146,16 @@ function generateOpenAPI(enrichedData: EnrichedMetadata): OpenAPISpec {
       }
 
       // Create OpenAPI operation
-      const operation: any = {
+      const operation: OpenAPIOperation = {
         operationId: `${controller.name}_${endpoint.handler}`,
         summary: enriched?.description || `${endpoint.method.toUpperCase()} ${fullPath}`,
         description: enriched?.useCase || `Execute ${endpoint.handler} operation`,
-        tags: [controller.name]
+        tags: [controller.name],
+        responses: {
+          '200': {
+            description: 'Successful response',
+          },
+        },
       };
 
       // Add parameters
@@ -142,13 +184,6 @@ function generateOpenAPI(enrichedData: EnrichedMetadata): OpenAPISpec {
         }
       }
 
-      // Add responses
-      operation.responses = {
-        '200': {
-          description: 'Successful response'
-        }
-      };
-
       if (endpoint.response && endpoint.response.$ref) {
         operation.responses['200'].content = {
           'application/json': {
@@ -164,16 +199,18 @@ function generateOpenAPI(enrichedData: EnrichedMetadata): OpenAPISpec {
       // Add error responses from enriched data
       if (enriched?.errorScenarios) {
         for (const error of enriched.errorScenarios) {
-          if (error.includes('400')) {
+          // Coerce to string — Ollama may return objects instead of plain strings
+          const errorStr = typeof error === 'string' ? error : JSON.stringify(error);
+          if (errorStr.includes('400')) {
             operation.responses['400'] = { description: 'Bad Request' };
           }
-          if (error.includes('401')) {
+          if (errorStr.includes('401')) {
             operation.responses['401'] = { description: 'Unauthorized' };
           }
-          if (error.includes('404')) {
+          if (errorStr.includes('404')) {
             operation.responses['404'] = { description: 'Not Found' };
           }
-          if (error.includes('500')) {
+          if (errorStr.includes('500')) {
             operation.responses['500'] = { description: 'Internal Server Error' };
           }
         }
@@ -194,12 +231,15 @@ function generateOpenAPI(enrichedData: EnrichedMetadata): OpenAPISpec {
 /**
  * Generate Markdown documentation from enriched metadata
  */
-function generateMarkdown(enrichedData: EnrichedMetadata): string {
+function generateMarkdown(
+  enrichedData: EnrichedMetadata,
+  projectInfo: { title: string; version: string; description: string },
+): string {
   const lines: string[] = [];
-  
-  lines.push('# API Documentation');
+
+  lines.push(`# ${projectInfo.title}`);
   lines.push('');
-  lines.push('Auto-generated API documentation from NestJS codebase.');
+  lines.push(projectInfo.description);
   lines.push('');
   lines.push(`*Generated on: ${new Date(enrichedData.enriched.generatedAt).toLocaleString()}*`);
   lines.push('');
@@ -309,30 +349,42 @@ function generateMarkdown(enrichedData: EnrichedMetadata): string {
 }
 
 /**
- * Main documentation generation function
+ * Main documentation generation function.
+ * Accepts either a file path string or an in-memory enriched metadata object.
  */
-async function generateDocs(inputFile: string, openapiFile: string, markdownFile: string): Promise<void> {
+async function generateDocs(
+  inputFileOrData: string | EnrichedMetadata,
+  openapiFile: string,
+  markdownFile: string,
+): Promise<{ openapi: OpenAPISpec; markdown: string } | undefined> {
   try {
-    console.log(`📖 Reading enriched metadata from ${inputFile}...`);
-    
-    if (!fs.existsSync(inputFile)) {
-      throw new Error(`Input file not found: ${inputFile}`);
+    let enrichedData: EnrichedMetadata;
+
+    if (typeof inputFileOrData === 'string') {
+      console.log(`📖 Reading enriched metadata from ${inputFileOrData}...`);
+      if (!fs.existsSync(inputFileOrData)) {
+        throw new Error(`Input file not found: ${inputFileOrData}`);
+      }
+      enrichedData = JSON.parse(fs.readFileSync(inputFileOrData, 'utf-8')) as EnrichedMetadata;
+    } else {
+      enrichedData = inputFileOrData;
     }
 
-    const enrichedData = JSON.parse(fs.readFileSync(inputFile, 'utf-8')) as EnrichedMetadata;
-    
+    const projectInfo = readProjectInfo();
+    console.log(`📦 Project: ${projectInfo.title} v${projectInfo.version}`);
+
     const totalEndpoints = enrichedData.controllers.reduce((sum, controller) => sum + controller.endpoints.length, 0);
     console.log(`📊 Generating docs for ${totalEndpoints} endpoints across ${enrichedData.controllers.length} controllers...`);
 
     // Generate OpenAPI specification
     console.log(`🔧 Generating OpenAPI 3.1 specification...`);
-    const openapi = generateOpenAPI(enrichedData);
+    const openapi = generateOpenAPI(enrichedData, projectInfo);
     fs.writeFileSync(openapiFile, JSON.stringify(openapi, null, 2));
     console.log(`✅ OpenAPI specification written to ${openapiFile}`);
 
     // Generate Markdown documentation
     console.log(`📝 Generating Markdown documentation...`);
-    const markdown = generateMarkdown(enrichedData);
+    const markdown = generateMarkdown(enrichedData, projectInfo);
     fs.writeFileSync(markdownFile, markdown);
     console.log(`✅ Markdown documentation written to ${markdownFile}`);
 
@@ -342,16 +394,20 @@ async function generateDocs(inputFile: string, openapiFile: string, markdownFile
     console.log(`   • OpenAPI paths: ${Object.keys(openapi.paths).length}`);
     console.log(`   • Components schemas: ${Object.keys(openapi.components.schemas).length}`);
     console.log(`   • Documentation sections: ${enrichedData.controllers.length + 1}`);
-    
+    return { openapi, markdown };
   } catch (error) {
     console.error('❌ Documentation generation failed:', error);
     process.exit(1);
   }
 }
 
+export { generateDocs };
+
 // Main execution
 const inputFile = process.argv[2] || './.temp/enriched-metadata.json';
 const openapiFile = process.argv[3] || './openapi.json';
 const markdownFile = process.argv[4] || './api-docs.md';
 
-generateDocs(inputFile, openapiFile, markdownFile);
+if (require.main === module) {
+  generateDocs(inputFile, openapiFile, markdownFile);
+}
